@@ -12,7 +12,8 @@ module Fluent
 
     config_param :host, :string
     config_param :port, :integer, :default => nil
-    config_param :database, :string
+    desc "'default' is work even well that 2 or more databases exist in a log file. For example, use with in_mysqlslowquery_ex."
+    config_param :database, :string, :default => 'database'
     config_param :username, :string
     config_param :password, :string, :default => '', :secret => true
 
@@ -30,20 +31,21 @@ module Fluent
 
     def filter(tag, time, record)
       sql = hash_get(record, @sql_key)
+      database = hash_get(record, @database)
       if !sql.nil? && !sql.empty?
-        record[@added_key] = explain(sql)
+        record[@added_key] = explain(sql, database)
       end
       record
     end
 
-    def explain(sql)
+    def explain(sql, database)
       if sql.empty? || !explainable?(sql)
         return ''
       end
 
       res = StringIO.new
 
-      handler = self.client
+      handler = self.client(database)
       handler.query("EXPLAIN #{sql}").each_with_index do |row, i|
         res.puts "*************************** #{i+1}. row ***************************"
         row.each do |key, value|
@@ -67,11 +69,11 @@ module Fluent
       nil
     end
 
-    def client
+    def client(database)
       Mysql2::Client.new({
           :host => @host, :port => @port,
           :username => @username, :password => @password,
-          :database => @database, :flags => Mysql2::Client::MULTI_STATEMENTS,
+          :database => database, :flags => Mysql2::Client::MULTI_STATEMENTS,
       })
     end 
   end
